@@ -81,6 +81,12 @@ for test commands and coding rules. Things you may want to adjust in
 /pr-review-codex 42                                   → Codex reviews, Claude rates findings
 ```
 
+## See also
+
+**[AI_Limitmeter](https://github.com/SirTobi88/AI_Limitmeter)** — an ESP32 desk display
+that shows Claude Code's and Codex's usage limits side by side, so you can see what
+handing work to Codex costs while you do it.
+
 ## Disclaimer
 
 Unofficial community skills — not affiliated with or endorsed by OpenAI or Anthropic.
