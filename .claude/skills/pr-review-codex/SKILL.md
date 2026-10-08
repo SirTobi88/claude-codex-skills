@@ -1,63 +1,63 @@
 ---
 name: pr-review-codex
-description: Laesst einen offenen GitHub-PR (Standard: den aeltesten) von Codex reviewen – neuestes Sol-Modell, Reasoning-Effort high – und gibt die Findings mit eigener Einschaetzung zurueck. Aufruf mit optionaler PR-Nummer, z. B. /pr-review-codex 25.
-argument-hint: "[PR-Nummer]"
+description: Has Codex review an open GitHub PR (default: the oldest) – newest Sol model, reasoning effort high – and returns the findings with your own assessment. Call with an optional PR number, e.g. /pr-review-codex 25.
+argument-hint: "[PR number]"
 allowed-tools: Bash, Read
 ---
 
-# PR-Review mit Codex
+# PR review with Codex
 
-Argument: `$ARGUMENTS` – leer = aeltester offener PR, sonst diese PR-Nummer.
+Argument: `$ARGUMENTS` – empty = oldest open PR, otherwise this PR number.
 
-Kein Subagent: Das Review ist ein einzelner Hintergrund-Befehl, Warten kostet nichts,
-und die Ausgabe bleibt unverfaelscht. Nichts am PR aendern, nichts kommentieren oder pushen.
+No subagent: the review is a single background command, waiting costs nothing,
+and the output stays unaltered. Do not change anything on the PR, do not comment or push.
 
-## Ablauf
+## Procedure
 
-`S` = Scratchpad-Verzeichnis dieser Session (nicht `/tmp`).
+`S` = this session's scratchpad directory (not `/tmp`).
 
-1. **PR bestimmen**
-   - ohne Argument: `gh pr list --state open --json number,headRefName,baseRefName,createdAt --jq 'sort_by(.createdAt)[0] | "\(.number) \(.headRefName) \(.baseRefName)"'`
-   - mit Argument: `gh pr view <nr> --json number,headRefName,baseRefName --jq '"\(.number) \(.headRefName) \(.baseRefName)"'`
-   - Kein offener PR → dem Nutzer sagen und aufhoeren.
+1. **Determine the PR**
+   - without argument: `gh pr list --state open --json number,headRefName,baseRefName,createdAt --jq 'sort_by(.createdAt)[0] | "\(.number) \(.headRefName) \(.baseRefName)"'`
+   - with argument: `gh pr view <nr> --json number,headRefName,baseRefName --jq '"\(.number) \(.headRefName) \(.baseRefName)"'`
+   - No open PR → tell the user and stop.
 
-2. **Neuestes Sol-Modell** zur Laufzeit ermitteln (nicht hart verdrahten):
+2. **Newest Sol model**, resolved at runtime (do not hard-code):
    `codex debug models 2>/dev/null | grep -o '"slug":"[^"]*-sol"' | cut -d'"' -f4 | sort -V | tail -1`
-   Leer → abbrechen und melden (Codex-CLI fehlt oder nicht angemeldet; `/codex:setup`).
+   Empty → abort and report (Codex CLI missing or not logged in; `/codex:setup`).
 
-3. **Eigener Worktree** – der Arbeitsbaum des Nutzers bleibt unberuehrt:
+3. **Separate worktree** – the user's working tree stays untouched:
    ```
    git fetch origin --quiet
    git worktree add --detach "$S/pr-<nr>" origin/<headRef>
    git -C "$S/pr-<nr>" diff --shortstat origin/<baseRef>...HEAD
    ```
 
-4. **Review im Hintergrund** starten (Bash mit `run_in_background: true`), dann dem
-   Nutzer kurz PR, Modell und Umfang nennen und auf die Benachrichtigung warten – nicht pollen:
+4. **Start the review in the background** (Bash with `run_in_background: true`), then briefly
+   tell the user the PR, model and size and wait for the notification – do not poll:
    ```
    cd "$S/pr-<nr>" && codex review --base origin/<baseRef> \
-     -c model='"<sol-modell>"' -c model_reasoning_effort='"high"' \
+     -c model='"<sol-model>"' -c model_reasoning_effort='"high"' \
      > "$S/pr-<nr>-review.md" 2>&1; echo "exit $?"
    ```
-   Das Plugin-Skript `codex-companion.mjs review` kennt kein `--effort`, darum direkt die CLI.
-   `-c` gilt nur fuer diesen Aufruf; `~/.codex/config.toml` nicht aendern.
+   The plugin script `codex-companion.mjs review` has no `--effort`, hence the CLI directly.
+   `-c` applies to this call only; do not modify `~/.codex/config.toml`.
 
-5. **Ergebnis lesen**: Kopf (Zeilen mit `model:` und `reasoning effort:` pruefen) und den
-   Schlussblock ab `Full review comments:` – die Datei ist lang, nicht komplett einlesen.
+5. **Read the result**: the header (check the lines with `model:` and `reasoning effort:`) and the
+   final block starting at `Full review comments:` – the file is long, do not read all of it.
 
-6. **Findings pruefen**: Jedes Finding an der genannten Stelle im Worktree nachsehen und als
-   *bestaetigt*, *plausibel* oder *zweifelhaft* einstufen (kurze Begruendung).
+6. **Verify the findings**: look up each finding at the given location in the worktree and rate it
+   as *confirmed*, *plausible* or *doubtful* (short reason).
 
-7. **Aufraeumen**: `git worktree remove --force "$S/pr-<nr>"`. Codex legt bei
-   Nachstellungen eigene Dateien an (z. B. unter `/tmp` bzw. `/private/tmp`) – auflisten,
-   aber nur auf Wunsch loeschen.
+7. **Clean up**: `git worktree remove --force "$S/pr-<nr>"`. When reproducing issues, Codex
+   creates its own files (e.g. under `/tmp` or `/private/tmp`) – list them,
+   but delete only on request.
 
-## Antwort an den Nutzer
+## Reply to the user
 
-Auf Deutsch, knapp:
-- Kopfzeile: PR (als Link `https://github.com/<owner>/<repo>/pull/<nr>`), Modell, Effort, Umfang.
-- Je Finding: Prioritaet, Titel, Datei:Zeile als Markdown-Link relativ zum Repo
-  (Worktree-Pfad abschneiden), Codex' Kernaussage, eigene Einstufung.
-- Codex' Gesamtfazit (z. B. Testlage) in einem Satz.
-- Pfad zur vollen Ausgabe, Hinweis auf Codex-Tempdateien.
-- Abschluss: anbieten, die Findings auf dem PR-Branch zu beheben – nicht ungefragt anfangen.
+Briefly:
+- Header line: PR (as link `https://github.com/<owner>/<repo>/pull/<nr>`), model, effort, size.
+- Per finding: priority, title, file:line as a Markdown link relative to the repo
+  (strip the worktree path), Codex's core statement, your own rating.
+- Codex's overall verdict (e.g. test situation) in one sentence.
+- Path to the full output, note on Codex temp files.
+- Closing: offer to fix the findings on the PR branch – do not start unasked.

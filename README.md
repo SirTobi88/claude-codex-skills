@@ -7,8 +7,8 @@ Codex model with high reasoning effort.
 They build on top of the official Codex plugin for Claude Code:
 👉 **[openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)**
 
-> The skill instructions are written in **German** (Claude follows them regardless of the
-> language you chat in). Feel free to translate them.
+> A German version of the skills is available on the
+> [`german_language`](https://github.com/SirTobi88/claude-codex-skills/tree/german_language) branch.
 
 ## Skills
 
@@ -70,7 +70,7 @@ The skills are deliberately generic and defer to your project's `CLAUDE.md` / `A
 for test commands and coding rules. Things you may want to adjust in
 [`codex-task/SKILL.md`](.claude/skills/codex-task/SKILL.md):
 
-- the `<regeln>` block of the Codex prompt (marked with an `Anpassen` comment) — add your core project rules,
+- the `<rules>` block of the Codex prompt (marked with a `Customize` comment) — add your core project rules,
 - the test / check command run before opening the PR,
 - PR language and commit message style.
 

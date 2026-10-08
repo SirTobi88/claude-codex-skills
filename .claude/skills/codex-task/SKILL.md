@@ -1,113 +1,112 @@
 ---
 name: codex-task
-description: Uebergibt eine Programmieraufgabe an Codex (neuestes Sol-Modell, Reasoning-Effort high), laesst sie in einem eigenen Worktree ab passendem Startpunkt (Standardbranch, aktueller Branch oder offener PR) umsetzen, prueft Tests und oeffnet danach einen PR. Das Review startet der Nutzer selbst. Aufruf z. B. /codex-task Validierung im Login-Formular ergaenzen.
-argument-hint: "<Aufgabe>"
+description: Hands a coding task to Codex (newest Sol model, reasoning effort high), has it implemented in a separate worktree from a suitable start point (default branch, current branch or an open PR), checks the tests and then opens a PR. The user starts the review themselves. Example: /codex-task Add input validation to the login form.
+argument-hint: "<task>"
 allowed-tools: Bash, Read, Write
 ---
 
-# Aufgabe an Codex uebergeben
+# Hand a task to Codex
 
-Aufgabe: `$ARGUMENTS` – leer → beim Nutzer nachfragen und aufhoeren.
+Task: `$ARGUMENTS` – empty → ask the user and stop.
 
-Kein Subagent: Codex laeuft als ein Hintergrund-Befehl, Warten kostet nichts.
-Selbst nichts implementieren und kein Review machen – das startet der Nutzer
-(z. B. `/pr-review-codex`). Rolle hier: Auftrag formulieren, Rahmen sichern, Ergebnis abliefern.
+No subagent: Codex runs as a single background command, waiting costs nothing.
+Do not implement anything yourself and do not review – the user starts that
+(e.g. `/pr-review-codex`). Your role here: write the brief, secure the frame, deliver the result.
 
-`S` = Scratchpad-Verzeichnis dieser Session (nicht `/tmp`).
+`S` = this session's scratchpad directory (not `/tmp`).
 
-## 1. Vorbereiten
+## 1. Prepare
 
-- **Startpunkt selbst entscheiden** – zuerst den Stand ansehen: `git branch --show-current`,
-  `git status --short`, `git log --oneline origin/<standard>..HEAD`, offene PRs
-  (`gh pr list --state open`). Dann nach der Aufgabe waehlen:
-  | Aufgabe … | Start (`<start>`) | PR-Basis (`<basis>`) |
+- **Choose the start point yourself** – look at the current state first: `git branch --show-current`,
+  `git status --short`, `git log --oneline origin/<default>..HEAD`, open PRs
+  (`gh pr list --state open`). Then choose based on the task:
+  | Task … | Start (`<start>`) | PR base (`<base>`) |
   |---|---|---|
-  | unabhaengig vom laufenden Branch | `origin/<standard>` (`gh repo view --json defaultBranchRef`) | Standardbranch |
-  | baut auf Commits des aktuellen Branchs bzw. eines offenen PR auf (z. B. Findings dort beheben) | dieser Branch | dieser Branch (gestapelter PR) |
-  | braucht die **nicht committeten** Aenderungen im Arbeitsbaum | erst nachfragen: Nutzer committet selbst (empfohlen) oder die Aenderungen werden in den Worktree kopiert und landen dann mit im Codex-PR | wie Zeile davor |
-  Ist der gewaehlte Branch lokal weiter als `origin` oder gar nicht gepusht: vom lokalen Stand
-  starten; vor dem PR fragen, ob dieser Branch gepusht werden darf (sonst keinen PR, nur Branch).
-  Im Zweifel zwischen zwei Zeilen kurz nachfragen statt raten.
-  Wahl samt Grund in der Startmeldung an den Nutzer nennen.
-- Kopieren nicht committeter Aenderungen (nur nach Zustimmung):
-  `git diff HEAD --binary | git -C <worktree> apply` und unversionierte Dateien
-  (`git ls-files --others --exclude-standard`) einzeln kopieren.
-- Branchname aus der Aufgabe ableiten, Praefix nach Art (`feat/`, `fix/`, `chore/`), kurz, kebab-case.
-  Pruefen, dass er weder lokal noch auf `origin` existiert.
-- Neuestes Sol-Modell (nicht hart verdrahten):
+  | independent of the current branch | `origin/<default>` (`gh repo view --json defaultBranchRef`) | default branch |
+  | builds on commits of the current branch or an open PR (e.g. fixing findings there) | that branch | that branch (stacked PR) |
+  | needs the **uncommitted** changes in the working tree | ask first: the user commits themselves (recommended) or the changes are copied into the worktree and end up in the Codex PR | same as the row above |
+  If the chosen branch is ahead of `origin` locally or not pushed at all: start from the local
+  state; before the PR, ask whether this branch may be pushed (otherwise no PR, branch only).
+  When torn between two rows, ask briefly instead of guessing.
+  State the choice and the reason in your start message to the user.
+- Copying uncommitted changes (only after consent):
+  `git diff HEAD --binary | git -C <worktree> apply` and copy untracked files
+  (`git ls-files --others --exclude-standard`) one by one.
+- Derive the branch name from the task, prefix by kind (`feat/`, `fix/`, `chore/`), short, kebab-case.
+  Check that it exists neither locally nor on `origin`.
+- Newest Sol model (do not hard-code):
   `codex debug models 2>/dev/null | grep -o '"slug":"[^"]*-sol"' | cut -d'"' -f4 | sort -V | tail -1`
-  Leer → abbrechen, auf `/codex:setup` verweisen.
-- Worktree – der Arbeitsbaum des Nutzers bleibt unberuehrt:
+  Empty → abort, point to `/codex:setup`.
+- Worktree – the user's working tree stays untouched:
   ```
   git fetch origin --quiet
-  git worktree add -b <branch> "$S/codex-<branch-ohne-praefix>" <start>
+  git worktree add -b <branch> "$S/codex-<branch-without-prefix>" <start>
   ```
 
-## 2. Auftrag schreiben
+## 2. Write the brief
 
-Nach `$S/codex-<name>-prompt.md`. Die Aufgabe des Nutzers woertlich uebernehmen, dazu nur
-Rahmen, keine eigene Loesung. Wenn noetig, mit kurzem Blick ins Repo (z. B. `docs/`) die
-betroffenen Dokumente oder Dateien als Fundstellen nennen. Gliederung:
+To `$S/codex-<name>-prompt.md`. Take the user's task verbatim, add only the frame,
+no solution of your own. If needed, take a quick look at the repo (e.g. `docs/`) and name the
+affected documents or files as pointers. Structure:
 
 ```
-<aufgabe>…woertlich…</aufgabe>
-<kontext>Fundstellen, Bezug zu Projektdokumentation, falls bekannt</kontext>
-<regeln>
-- Projektregeln aus AGENTS.md/CLAUDE.md befolgen.
-  <!-- Anpassen: eigene Kernregeln hier ergaenzen, z. B. Tests zuerst, Kommentarsprache,
-  Architekturvorgaben aus docs/. -->
-- Klein und fokussiert bleiben, nichts Unbeteiligtes umbauen.
-- Nicht committen, nicht pushen, keine Branches anlegen.
-- Betroffene Tests ausfuehren (Befehl laut AGENTS.md/CLAUDE.md) bis gruen.
-</regeln>
-<rueckgabe>
-Kurz auf Deutsch: was geaendert wurde (Dateien), welche Tests neu sind, Testergebnis,
-offene Punkte oder Annahmen. Erste Zeile: Vorschlag fuer die Commit-Nachricht
-im Stil des Repos (z. B. "fix(scope): …").
-</rueckgabe>
+<task>…verbatim…</task>
+<context>Pointers, relation to project documentation, if known</context>
+<rules>
+- Follow the project rules from AGENTS.md/CLAUDE.md.
+  <!-- Customize: add your core rules here, e.g. tests first, comment language,
+  architecture constraints from docs/. -->
+- Stay small and focused, do not refactor anything unrelated.
+- Do not commit, do not push, do not create branches.
+- Run the affected tests (command per AGENTS.md/CLAUDE.md) until green.
+</rules>
+<return>
+Briefly: what was changed (files), which tests are new, test result,
+open points or assumptions. First line: suggested commit message
+in the repo's style (e.g. "fix(scope): …").
+</return>
 ```
 
-## 3. Codex starten
+## 3. Start Codex
 
-Bash mit `run_in_background: true`, dann dem Nutzer kurz Branch und Modell nennen und auf
-die Benachrichtigung warten – nicht pollen:
+Bash with `run_in_background: true`, then briefly tell the user the branch and model and wait
+for the notification – do not poll:
 ```
 codex exec -C "$S/codex-<name>" -s workspace-write \
-  -m <sol-modell> -c model_reasoning_effort='"high"' \
+  -m <sol-model> -c model_reasoning_effort='"high"' \
   -o "$S/codex-<name>-result.md" - < "$S/codex-<name>-prompt.md" \
   > "$S/codex-<name>-log.md" 2>&1; echo "exit $?"
 ```
-`-c`/`-m` gelten nur fuer diesen Aufruf; `~/.codex/config.toml` nicht aendern.
-Im Sandbox-Modus kann Codex nicht ins Netz und nicht ins Haupt-`.git` schreiben – darum
-committet nicht Codex, sondern dieser Skill.
+`-c`/`-m` apply to this call only; do not modify `~/.codex/config.toml`.
+In sandbox mode Codex cannot reach the network and cannot write to the main `.git` – that is why
+this skill commits, not Codex.
 
-## 4. Ergebnis pruefen
+## 4. Check the result
 
-- `$S/codex-<name>-result.md` lesen; Kopf des Logs auf `model:` und `reasoning effort:` pruefen.
-- `git -C <worktree> status --short` und `diff --stat`. Kein Diff → melden, Worktree
-  entfernen, aufhoeren.
-- Die Projektpruefung im Worktree laufen lassen, falls vorhanden (z. B. ein Testskript
-  laut CLAUDE.md/AGENTS.md, sonst die betroffenen Tests). Rot → **kein PR**; Fehler und Codex-Rueckgabe dem Nutzer
-  zeigen und anbieten, Codex mit der Fehlermeldung nachbessern zu lassen
-  (gleicher Worktree, neuer `codex exec`-Lauf, Prompt = Fehlerausgabe + „bitte beheben“).
-- Kurz auf Ausreisser schauen (Dateien ausserhalb des Auftrags, Secrets, grosse Binaries) –
-  kein inhaltliches Review.
+- Read `$S/codex-<name>-result.md`; check the log header for `model:` and `reasoning effort:`.
+- `git -C <worktree> status --short` and `diff --stat`. No diff → report, remove the worktree,
+  stop.
+- Run the project check in the worktree, if there is one (e.g. a test script
+  per CLAUDE.md/AGENTS.md, otherwise the affected tests). Red → **no PR**; show the user the errors
+  and Codex's return and offer to let Codex fix it
+  (same worktree, new `codex exec` run, prompt = error output + "please fix").
+- Take a quick look for outliers (files outside the task, secrets, large binaries) –
+  no content review.
 
-## 5. Commit, Push, PR
+## 5. Commit, push, PR
 
-Die Skill-Ausfuehrung ist der Auftrag dazu; nur bei Ausreissern vorher fragen.
+Running the skill is the mandate for this; ask beforehand only if there are outliers.
 ```
 git -C <worktree> add -A
-git -C <worktree> commit -m "<Codex-Vorschlag>" -m "Umgesetzt von Codex (<sol-modell>, effort high)." -m "Co-Authored-By: …laut aktueller Attribution…"
+git -C <worktree> commit -m "<Codex suggestion>" -m "Implemented by Codex (<sol-model>, effort high)." -m "Co-Authored-By: …per current attribution…"
 git -C <worktree> push -u origin <branch>
-gh pr create --head <branch> --base <basis> --title "<Commit-Titel>" --body-file <datei>
+gh pr create --head <branch> --base <base> --title "<commit title>" --body-file <file>
 ```
-PR-Text auf Deutsch: Aufgabe, Aenderungen, Tests, offene Punkte aus der Codex-Rueckgabe,
-Hinweis „Umgesetzt von Codex (<modell>, effort high)“, Attributionszeile.
-Kein Auto-Merge.
+PR body: task, changes, tests, open points from the Codex return,
+note "Implemented by Codex (<model>, effort high)", attribution line. No auto-merge.
 
-## 6. Aufraeumen und melden
+## 6. Clean up and report
 
-- `git worktree remove "$S/codex-<name>"` (Branch bleibt fuer den PR bestehen).
-- Antwort auf Deutsch, knapp: PR-Link, Branch, Modell, geaenderte Dateien, Testergebnis,
-  offene Punkte von Codex. Hinweis: Review mit `/pr-review-codex <nr>` starten.
+- `git worktree remove "$S/codex-<name>"` (the branch stays for the PR).
+- Reply briefly: PR link, branch, model, changed files, test result,
+  open points from Codex. Hint: start the review with `/pr-review-codex <nr>`.
